@@ -1,7 +1,8 @@
-'use client';
+"use client";
 
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 interface Dairy {
   id: string;
@@ -181,29 +182,12 @@ const translations: Record<string, Record<string, string>> = {
 };
 
 export default function CompleteMasterDairyManager() {
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [agreed, setAgreed] = useState(false);
-
+  const router = useRouter();
   const [lang, setLang] = useState<"en" | "hi">("hi");
   const t = translations[lang] || translations.en;
 
-  const [isAuth, setIsAuth] = useState(false);
-  const [userRole, setUserRole] = useState<"owner" | "farmer">("owner");
   const [loading, setLoading] = useState(true);
   const [dairy, setDairy] = useState<Dairy | null>(null);
-
-  const [authTab, setAuthTab] = useState<"owner" | "farmer">("owner");
-  const [ownerMode, setOwnerMode] = useState<"login" | "register">("login");
-  const [emailInput, setEmailInput] = useState("");
-  const [passInput, setPassInput] = useState("");
-  const [regDairyName, setRegDairyName] = useState("");
-  const [regOwnerName, setRegOwnerName] = useState("");
-  const [regPhone, setRegPhone] = useState("");
-
-  const [dCodeInput, setDCodeInput] = useState("");
-  const [fCodeInput, setFCodeInput] = useState("");
-  const [fPinInput, setFPinInput] = useState("");
-  const [authError, setAuthError] = useState("");
 
   const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -211,10 +195,6 @@ export default function CompleteMasterDairyManager() {
   const [allSales, setAllSales] = useState<MilkSale[]>([]);
   const [allWastages, setAllWastages] = useState<MilkWastage[]>([]);
   const [allPayments, setAllPayments] = useState<PaymentRecord[]>([]);
-
-  const [loggedInFarmer, setLoggedInFarmer] = useState<Farmer | null>(null);
-  const [newFarmerPin, setNewFarmerPin] = useState("");
-  const [pinChangeMsg, setPinChangeMsg] = useState("");
 
   const [activeBottomNav, setActiveBottomNav] = useState<"dashboard" | "entry" | "farmers" | "payments" | "reports" | "parchis" | "settings">("dashboard");
 
@@ -286,33 +266,16 @@ export default function CompleteMasterDairyManager() {
 
   useEffect(() => {
     const savedDairyId = localStorage.getItem("currentDairyId");
-    const savedRole = localStorage.getItem("userRole") as "owner" | "farmer";
-    const savedFarmerId = localStorage.getItem("currentFarmerId");
-    const isTermsAcceptedStorage = localStorage.getItem("dairyTermsAccepted");
+    const userRole = localStorage.getItem("userRole");
 
-    if (isTermsAcceptedStorage === "true") {
-      setTermsAccepted(true);
-    }
-
-    if (savedDairyId && savedRole) {
-      setIsAuth(true);
-      setUserRole(savedRole);
-      loadAppData(savedDairyId, savedRole, savedFarmerId);
+    if (!savedDairyId || userRole !== "owner") {
+      router.push("/auth");
     } else {
-      setLoading(false);
+      loadOwnerData(savedDairyId);
     }
-  }, []);
+  }, [router]);
 
-  const handleAllowTerms = () => {
-    if (agreed) {
-      setTermsAccepted(true);
-      localStorage.setItem("dairyTermsAccepted", "true");
-    } else {
-      alert("Kripya aage badhne ke liye terms ko allow karein.");
-    }
-  };
-
-  const loadAppData = async (dId: string, role: "owner" | "farmer", fId: string | null) => {
+  const loadOwnerData = async (dId: string) => {
     try {
       setLoading(true);
       const { data: dData } = await supabase.from("dairies").select("*").eq("id", dId).maybeSingle();
@@ -329,42 +292,29 @@ export default function CompleteMasterDairyManager() {
       setSettingEmail(dData.email || "");
       setSettingLogoUrl(dData.logo_url || "");
 
-      if (role === "farmer" && fId) {
-        const { data: fData } = await supabase.from("farmers").select("*").eq("id", fId).single();
-        setLoggedInFarmer(fData || null);
+      const [fRes, sRes, eRes, saleRes, wRes, pRes] = await Promise.all([
+        supabase.from("farmers").select("*").eq("dairy_id", dId).order("created_at", { ascending: false }),
+        supabase.from("suppliers").select("*").eq("dairy_id", dId).order("created_at", { ascending: false }),
+        supabase.from("milk_entries").select("*, farmers(*)").eq("dairy_id", dId).order("created_at", { ascending: false }),
+        supabase.from("milk_sales").select("*, suppliers(*)").eq("dairy_id", dId).order("created_at", { ascending: false }),
+        supabase.from("milk_wastage").select("*").eq("dairy_id", dId).order("created_at", { ascending: false }),
+        supabase.from("dairy_payments").select("*").eq("dairy_id", dId).order("created_at", { ascending: false }),
+      ]);
 
-        const [eRes, pRes] = await Promise.all([
-          supabase.from("milk_entries").select("*, farmers(*)").eq("farmer_id", fId).order("created_at", { ascending: false }),
-          supabase.from("dairy_payments").select("*").eq("farmer_id", fId).order("created_at", { ascending: false }),
-        ]);
+      setFarmers(fRes.data || []);
+      setSuppliers(sRes.data || []);
+      setAllEntries((eRes.data as MilkEntry[]) || []);
+      setAllSales((saleRes.data as MilkSale[]) || []);
+      setAllWastages((wRes.data as MilkWastage[]) || []);
+      setAllPayments((pRes.data as PaymentRecord[]) || []);
 
-        setAllEntries((eRes.data as MilkEntry[]) || []);
-        setAllPayments((pRes.data as PaymentRecord[]) || []);
-      } else {
-        const [fRes, sRes, eRes, saleRes, wRes, pRes] = await Promise.all([
-          supabase.from("farmers").select("*").eq("dairy_id", dId).order("created_at", { ascending: false }),
-          supabase.from("suppliers").select("*").eq("dairy_id", dId).order("created_at", { ascending: false }),
-          supabase.from("milk_entries").select("*, farmers(*)").eq("dairy_id", dId).order("created_at", { ascending: false }),
-          supabase.from("milk_sales").select("*, suppliers(*)").eq("dairy_id", dId).order("created_at", { ascending: false }),
-          supabase.from("milk_wastage").select("*").eq("dairy_id", dId).order("created_at", { ascending: false }),
-          supabase.from("dairy_payments").select("*").eq("dairy_id", dId).order("created_at", { ascending: false }),
-        ]);
-
-        setFarmers(fRes.data || []);
-        setSuppliers(sRes.data || []);
-        setAllEntries((eRes.data as MilkEntry[]) || []);
-        setAllSales((saleRes.data as MilkSale[]) || []);
-        setAllWastages((wRes.data as MilkWastage[]) || []);
-        setAllPayments((pRes.data as PaymentRecord[]) || []);
-
-        if (fRes.data && fRes.data.length > 0) {
-          setEntryFarmerId(fRes.data[0].id);
-          setEntryFarmerCode(fRes.data[0].farmer_code || "");
-          setSelectedPayTargetId(fRes.data[0].id);
-        }
-        if (sRes.data && sRes.data.length > 0) {
-          setSaleSupplierId(sRes.data[0].id);
-        }
+      if (fRes.data && fRes.data.length > 0) {
+        setEntryFarmerId(fRes.data[0].id);
+        setEntryFarmerCode(fRes.data[0].farmer_code || "");
+        setSelectedPayTargetId(fRes.data[0].id);
+      }
+      if (sRes.data && sRes.data.length > 0) {
+        setSaleSupplierId(sRes.data[0].id);
       }
     } catch (err: any) {
       console.error(err.message);
@@ -373,99 +323,9 @@ export default function CompleteMasterDairyManager() {
     }
   };
 
-  const handleOwnerAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError("");
-    try {
-      if (ownerMode === "login") {
-        const { data, error } = await supabase
-          .from("dairies")
-          .select("*")
-          .eq("email", emailInput.trim().toLowerCase())
-          .maybeSingle();
-
-        if (error || !data || data.password_hash !== passInput.trim()) {
-          setAuthError(lang === "hi" ? "❌ गलत ईमेल या पासवर्ड!" : "❌ Invalid Email or Password!");
-          return;
-        }
-
-        localStorage.setItem("currentDairyId", data.id);
-        localStorage.setItem("userRole", "owner");
-        setIsAuth(true);
-        setUserRole("owner");
-        loadAppData(data.id, "owner", null);
-      } else {
-        const generatedCode = "dairy" + Math.floor(1000 + Math.random() * 9000);
-        const { data, error } = await supabase
-          .from("dairies")
-          .insert([
-            {
-              name: regDairyName.trim(),
-              owner_name: regOwnerName.trim() || "Owner",
-              email: emailInput.trim().toLowerCase(),
-              phone: regPhone.trim(),
-              password_hash: passInput.trim(),
-              dairy_code: generatedCode,
-            },
-          ])
-          .select()
-          .single();
-
-        if (error) throw error;
-        localStorage.setItem("currentDairyId", data.id);
-        localStorage.setItem("userRole", "owner");
-        setIsAuth(true);
-        setUserRole("owner");
-        loadAppData(data.id, "owner", null);
-      }
-    } catch (err: any) {
-      setAuthError("Error: " + err.message);
-    }
-  };
-
-  const handleFarmerLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError("");
-    try {
-      const { data: dData } = await supabase
-        .from("dairies")
-        .select("id")
-        .eq("dairy_code", dCodeInput.trim().toLowerCase())
-        .maybeSingle();
-
-      if (!dData) {
-        setAuthError(lang === "hi" ? "❌ इस कोड पर कोई डेयरी नहीं मिली!" : "❌ Dairy not found!");
-        return;
-      }
-
-      const { data: fData } = await supabase
-        .from("farmers")
-        .select("*")
-        .eq("dairy_id", dData.id)
-        .eq("farmer_code", fCodeInput.trim().toLowerCase())
-        .maybeSingle();
-
-      if (!fData || fData.pin_hash !== fPinInput.trim()) {
-        setAuthError(lang === "hi" ? "❌ गलत किसान आईडी या पिन!" : "❌ Invalid Farmer ID or PIN!");
-        return;
-      }
-
-      localStorage.setItem("currentDairyId", dData.id);
-      localStorage.setItem("currentFarmerId", fData.id);
-      localStorage.setItem("userRole", "farmer");
-      setIsAuth(true);
-      setUserRole("farmer");
-      loadAppData(dData.id, "farmer", fData.id);
-    } catch (err: any) {
-      setAuthError("Error: " + err.message);
-    }
-  };
-
   const handleLogout = () => {
     localStorage.clear();
-    setIsAuth(false);
-    setLoggedInFarmer(null);
-    setTermsAccepted(false);
+    router.push("/auth");
   };
 
   const handlePillClick = (pill: string) => {
@@ -590,7 +450,7 @@ export default function CompleteMasterDairyManager() {
       if (error) throw error;
       alert(`Kisan #${cleanCode} jud gaya!`);
       setShowAddFarmerModal(false);
-      loadAppData(dairy.id, "owner", null);
+      loadOwnerData(dairy.id);
     } catch (err: any) {
       alert("Error: " + err.message);
     }
@@ -615,7 +475,7 @@ export default function CompleteMasterDairyManager() {
       if (error) throw error;
       alert(`Buyer/Supplier #${cleanCode} jud gaya!`);
       setShowAddSupplierModal(false);
-      loadAppData(dairy.id, "owner", null);
+      loadOwnerData(dairy.id);
     } catch (err: any) {
       alert("Error: " + err.message);
     }
@@ -666,14 +526,14 @@ export default function CompleteMasterDairyManager() {
       setCurrentSlip(slip);
       setSlipModalOpen(true);
       setEntryQty(""); setEntryFat(""); setEntrySnf(""); setEntryWater(""); setIsManualRate(false);
-      loadAppData(dairy.id, "owner", null);
+      loadOwnerData(dairy.id);
     } catch (err: any) {
       alert("Error: " + err.message);
     }
   };
 
   const sendWhatsAppSlip = (slip: DigitalSlipData) => {
-    const text = `🥛 *${slip.dairyName.toUpperCase()} - DOODH PARCHI* 🥛\n--------------------------------\n📅 Tarikh: ${slip.date} (${slip.time})\n☀️ Shift: ${slip.shift}\n👤 Kisan: *${slip.farmerName}* (ID: #${slip.farmerCode})\n🐄 Milk: ${slip.milkType}\n--------------------------------\n⚖️️ Matra: *${slip.qty.toFixed(2)} Ltr*\n🧈 Fat: *${slip.fat.toFixed(1)}%*\n🧪 SNF: *${slip.snf > 0 ? slip.snf.toFixed(1) + "%" : "N/A"}*\n💧 Water: *${slip.water > 0 ? slip.water.toFixed(1) + "%" : "0.0%"}*\n💵 Rate: *₹${slip.rate.toFixed(2)} / Ltr*\n--------------------------------\n💰 *KUL RASHI: ₹${slip.total.toFixed(2)}*\n--------------------------------\nDairy Helpline: ${slip.dairyPhone || "N/A"}\nDhanyawad! 🙏`;
+    const text = `🥛 *${slip.dairyName.toUpperCase()} - DOODH PARCHI* 🥛\n--------------------------------\n📅 Tarikh: ${slip.date} (${slip.time})\n☀️ Shift: ${slip.shift}\n👤 Kisan: *${slip.farmerName}* (ID: #${slip.farmerCode})\n🐄 Milk: ${slip.milkType}\n--------------------------------\n⚖️ Matra: *${slip.qty.toFixed(2)} Ltr*\n🧈 Fat: *${slip.fat.toFixed(1)}%*\n🧪 SNF: *${slip.snf > 0 ? slip.snf.toFixed(1) + "%" : "N/A"}*\n💧 Water: *${slip.water > 0 ? slip.water.toFixed(1) + "%" : "0.0%"}*\n💵 Rate: *₹${slip.rate.toFixed(2)} / Ltr*\n--------------------------------\n💰 *KUL RASHI: ₹${slip.total.toFixed(2)}*\n--------------------------------\nDairy Helpline: ${slip.dairyPhone || "N/A"}\nDhanyawad! 🙏`;
     let cleanPhone = slip.farmerPhone.replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
@@ -744,7 +604,7 @@ export default function CompleteMasterDairyManager() {
       if (error) throw error;
       alert(`Payment Recorded!`);
       setPayAmount(""); setPayRefNo(""); setPayNotes("");
-      loadAppData(dairy.id, "owner", null);
+      loadOwnerData(dairy.id);
     } catch (err: any) {
       alert("Error: " + err.message);
     }
@@ -774,7 +634,7 @@ export default function CompleteMasterDairyManager() {
       alert("Milk Supply Recorded!");
       setShowSupplyModal(false);
       setSaleQty(""); setSaleRate("");
-      loadAppData(dairy.id, "owner", null);
+      loadOwnerData(dairy.id);
     } catch (err: any) {
       alert("Error: " + err.message);
     }
@@ -797,7 +657,7 @@ export default function CompleteMasterDairyManager() {
       alert("Rejected/Bad Milk Recorded!");
       setShowRejectedModal(false);
       setWasteQty(""); setWastePrice("");
-      loadAppData(dairy.id, "owner", null);
+      loadOwnerData(dairy.id);
     } catch (err: any) {
       alert("Error: " + err.message);
     }
@@ -826,26 +686,9 @@ export default function CompleteMasterDairyManager() {
       if (error) throw error;
       alert("Dairy Settings Updated!");
       setSettingNewPassword("");
-      loadAppData(dairy.id, "owner", null);
+      loadOwnerData(dairy.id);
     } catch (err: any) {
       alert("Error: " + err.message);
-    }
-  };
-
-  const handleFarmerChangePin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!loggedInFarmer || !newFarmerPin) return;
-    if (newFarmerPin.trim().length < 4) {
-      setPinChangeMsg("PIN kam se kam 4 characters ka hona chahiye.");
-      return;
-    }
-    try {
-      const { error } = await supabase.from("farmers").update({ pin_hash: newFarmerPin.trim() }).eq("id", loggedInFarmer.id);
-      if (error) throw error;
-      setPinChangeMsg("Password / PIN successfully update ho gaya!");
-      setNewFarmerPin("");
-    } catch (err: any) {
-      setPinChangeMsg("Error: " + err.message);
     }
   };
 
@@ -864,312 +707,6 @@ export default function CompleteMasterDairyManager() {
     );
   }
 
-  // 1. TERMS & CONDITIONS SCREEN (AGREEMENT GATE)
-  if (!termsAccepted) {
-    return (
-      <div style={{ maxWidth: '800px', margin: '40px auto', padding: '20px', fontFamily: 'sans-serif' }}>
-        <h2 style={{ marginBottom: '20px', color: '#333' }}>Dairy Flow Pro - Terms & Conditions</h2>
-
-        <div style={{ 
-          height: '250px', 
-          overflowY: 'scroll', 
-          padding: '20px', 
-          border: '1px solid #ccc', 
-          borderRadius: '8px',
-          backgroundColor: '#f9f9f9',
-          marginBottom: '20px',
-          lineHeight: '1.6',
-          fontSize: '14px',
-          color: '#555'
-        }}>
-          Dairy Flow Pro is built with the primary purpose of helping dairy owners, workers, and farmers manage their daily milk collection, animal records, financial tracking, payment calculations, and operational summaries smoothly and efficiently, ensuring that everyone involved in the dairy ecosystem can keep track of their daily work transparently and without unnecessary complications. Every feature integrated into this platform has been designed specifically to support the daily workflow of managing milk distribution, maintaining daily shift records, tracking fat and SNF values, handling customer accounts, and generating reports digitally. However, while we provide this platform as a helpful management tool to make your daily routine easier, it is absolutely essential for every user, dairy owner, and farmer to understand how data, system usage, privacy, and liabilities are handled as you navigate through the application. As you move forward into the subsequent pages, explore the various dashboard features, enter daily data, and use the system regularly, please be explicitly aware of our strict liability terms regarding data security, system operations, and unexpected technical failures. We take absolutely no responsibility or liability whatsoever for any data loss, data corruption, financial loss, server downtime, system errors, data leaks, or security breaches that may occur on the platform under any circumstances whatsoever. The user, dairy owner, and farmer explicitly acknowledge, understand, and agree that we carry zero legal, operational, financial, or moral liability for what happens to the data entered, stored, or processed within the system, whether due to technical glitches, software bugs, unauthorized access, hacking attempts, third-party interference, or any unforeseen circumstances beyond our control. You are solely, entirely, and completely responsible for your own data security, account credentials, device safety, operational choices, and passwords. The service is provided strictly on an as-is and as-available basis without any warranties or guarantees of any kind, whether express or implied, meaning we do not guarantee uninterrupted access, error-free execution, or absolute perfection in system performance. By continuing to use this application, accessing the features, scrolling through the pages, and proceeding further into the system, you unconditionally accept that the platform provider bears no responsibility for any unexpected issues, breaches, losses, or damages, and you completely agree to these terms to proceed further.
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-          <input 
-            type="checkbox" 
-            id="termsCheck" 
-            checked={agreed} 
-            onChange={(e) => setAgreed(e.target.checked)}
-            style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-          />
-          <label htmlFor="termsCheck" style={{ cursor: 'pointer', fontSize: '15px', fontWeight: '500', color: '#333' }}>
-            I have read and agree to all the terms and conditions. Allow access.
-          </label>
-        </div>
-
-        <button 
-          onClick={handleAllowTerms}
-          disabled={!agreed}
-          style={{
-            padding: '12px 28px',
-            backgroundColor: agreed ? '#27ae60' : '#bdc3c7',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            fontSize: '16px',
-            cursor: agreed ? 'pointer' : 'not-allowed',
-            fontWeight: 'bold'
-          }}
-        >
-          Allow & Continue
-        </button>
-      </div>
-    );
-  }
-
-  // 2. LOGIN & REGISTER SCREEN
-  if (!isAuth) {
-    return (
-      <div className="min-h-screen bg-[#F3F6F4] flex items-center justify-center p-4 font-sans">
-        <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-200">
-          <div className="text-center mb-6">
-            <span className="text-4xl">🥛</span>
-            <h1 className="text-2xl font-black text-slate-900 mt-2">Dairy Flow Pro</h1>
-            <p className="text-xs text-slate-500 mt-1">Apna Login Role chuniye</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl mb-5">
-            <button type="button" onClick={() => { setAuthTab("owner"); setAuthError(""); }} className={`py-2 text-xs font-extrabold rounded-xl transition ${authTab === "owner" ? "bg-[#00796B] text-white shadow-sm" : "text-slate-600"}`}>
-              👑 Dairy Owner
-            </button>
-            <button type="button" onClick={() => { setAuthTab("farmer"); setAuthError(""); }} className={`py-2 text-xs font-extrabold rounded-xl transition ${authTab === "farmer" ? "bg-[#00796B] text-white shadow-sm" : "text-slate-600"}`}>
-              🌾 Farmer Portal
-            </button>
-          </div>
-
-          {authError && <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs text-center font-bold">{authError}</div>}
-
-          {authTab === "owner" ? (
-            <div>
-              <div className="grid grid-cols-2 border border-slate-200 rounded-xl p-1 mb-4 text-xs font-bold text-center">
-                <button type="button" onClick={() => setOwnerMode("login")} className={`py-1.5 rounded-lg transition ${ownerMode === "login" ? "bg-slate-900 text-white" : "text-slate-600"}`}>Login</button>
-                <button type="button" onClick={() => setOwnerMode("register")} className={`py-1.5 rounded-lg transition ${ownerMode === "register" ? "bg-slate-900 text-white" : "text-slate-600"}`}>Register (Sign Up)</button>
-              </div>
-
-              <form onSubmit={handleOwnerAuth} className="space-y-3.5">
-                {ownerMode === "register" && (
-                  <>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Dairy Name *</label>
-                      <input type="text" required placeholder="Shyam Milk Dairy" value={regDairyName} onChange={(e) => setRegDairyName(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-semibold outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Owner Name *</label>
-                      <input type="text" required placeholder="Shyam Singh" value={regOwnerName} onChange={(e) => setRegOwnerName(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-semibold outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number *</label>
-                      <input type="tel" required maxLength={10} placeholder="10 digit phone number" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-semibold outline-none" />
-                    </div>
-                  </>
-                )}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Email Address *</label>
-                  <input type="email" required placeholder="admin@dairy.com" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-semibold outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Password *</label>
-                  <input type="password" required placeholder="••••••••" value={passInput} onChange={(e) => setPassInput(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-semibold outline-none" />
-                </div>
-                <button type="submit" className="w-full bg-[#00796B] hover:bg-[#004D40] text-white py-3 rounded-xl font-bold text-xs shadow-md transition mt-2">
-                  {ownerMode === "login" ? "Owner Login 🚀" : "Register New Dairy ✨"}
-                </button>
-              </form>
-            </div>
-          ) : (
-            <form onSubmit={handleFarmerLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Dairy Code</label>
-                <input type="text" required placeholder="e.g. shyam1234" value={dCodeInput} onChange={(e) => setDCodeInput(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-semibold outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Farmer ID (Code)</label>
-                <input type="text" required placeholder="e.g. shyam101" value={fCodeInput} onChange={(e) => setFCodeInput(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-semibold outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Login PIN</label>
-                <input type="password" required placeholder="••••••••" value={fPinInput} onChange={(e) => setFPinInput(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-semibold outline-none" />
-              </div>
-              <button type="submit" className="w-full bg-[#00796B] hover:bg-[#004D40] text-white py-3 rounded-xl font-bold text-xs shadow-md transition">
-                Farmer Login 🌾
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // 3. FARMER PORTAL VIEW
-  if (userRole === "farmer" && loggedInFarmer) {
-    const isFarmerDateInRange = (dateStr: string) => {
-      const d = dateStr.slice(0, 10);
-      return d >= filterStartDate && d <= filterEndDate;
-    };
-
-    const filteredFarmerEntries = allEntries.filter((e) => isFarmerDateInRange(e.created_at));
-    const farmerTotalMilk = filteredFarmerEntries.reduce((acc, c) => acc + Number(c.quantity_litres || c.quantity_liters || 0), 0);
-    const farmerTotalBill = filteredFarmerEntries.reduce((acc, c) => acc + Number(c.total_amount || 0), 0);
-    const farmerTotalPaid = allPayments.reduce((acc, c) => acc + Number(c.amount || 0), 0);
-    const farmerBalance = Math.round((farmerTotalBill - farmerTotalPaid) * 100) / 100;
-
-    const ownerPhone = dairy?.phone || "";
-    const cleanOwnerPhone = ownerPhone.replace(/\D/g, "");
-
-    return (
-      <div className="min-h-screen bg-[#F3F6F4] text-slate-800 pb-16 font-sans antialiased p-4">
-        <header className="bg-[#00796B] text-white px-5 py-4 rounded-2xl shadow-md flex flex-col sm:flex-row items-center justify-between mb-6 gap-3">
-          <div className="flex items-center space-x-3 w-full sm:w-auto">
-            <span className="text-3xl">🌾</span>
-            <div>
-              <h1 className="font-extrabold text-lg leading-none">Kisan Portal: {loggedInFarmer.name}</h1>
-              <span className="text-xs text-teal-100 font-medium">Farmer ID: <b>#{loggedInFarmer.farmer_code}</b> • Dairy: {dairy?.name}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <select value={lang} onChange={(e) => setLang(e.target.value as any)} className="bg-white/20 text-white text-xs px-2.5 py-1.5 rounded-lg border border-white/30 font-bold outline-none cursor-pointer">
-              <option value="en" className="text-slate-800">English</option>
-              <option value="hi" className="text-slate-800">हिन्दी</option>
-            </select>
-            {ownerPhone && (
-              <>
-                <a href={`tel:${ownerPhone}`} className="bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold px-3 py-2 rounded-xl shadow flex items-center gap-1">
-                  <span>📞</span> Call
-                </a>
-                <a href={`https://wa.me/${cleanOwnerPhone.length === 10 ? '91' + cleanOwnerPhone : cleanOwnerPhone}?text=${encodeURIComponent("Namaste Dairy Owner ji, mujhe mera hisab dekhna hai.")}`} target="_blank" rel="noopener noreferrer" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow flex items-center gap-1">
-                  <span>💬</span> WhatsApp
-                </a>
-              </>
-            )}
-            <button onClick={handleLogout} className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow transition">
-              🚪 Logout
-            </button>
-          </div>
-        </header>
-
-        <main className="max-w-3xl mx-auto space-y-6">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-            <p className="text-xs font-bold text-slate-700 uppercase">📅 Hisab Filter Karein (Date Range)</p>
-            <div className="flex flex-wrap gap-1.5">
-              {["Today", "Yesterday", "Last 7 Days", "This Month", "This Year"].map((pill) => (
-                <button key={pill} onClick={() => handlePillClick(pill)} className={`px-3 py-1 rounded-full text-xs font-bold transition ${activeDatePill === pill ? "bg-[#00796B] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-                  {pill}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">From Date</label>
-                <input type="date" value={filterStartDate} onChange={(e) => { setFilterStartDate(e.target.value); setActiveDatePill("Custom"); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">To Date</label>
-                <input type="date" value={filterEndDate} onChange={(e) => { setFilterEndDate(e.target.value); setActiveDatePill("Custom"); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none" />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Aapka Kul Doodh</p>
-              <p className="text-xl font-black text-slate-900 mt-1">{farmerTotalMilk.toFixed(1)} L</p>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Kul Bill (+)</p>
-              <p className="text-xl font-black text-emerald-700 mt-1">₹{farmerTotalBill.toFixed(0)}</p>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Prapt Bhugtan (-)</p>
-              <p className="text-xl font-black text-rose-600 mt-1">₹{farmerTotalPaid.toFixed(0)}</p>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Bacha Balance</p>
-              <p className={`text-xl font-black mt-1 ${farmerBalance > 0 ? "text-rose-600" : "text-emerald-700"}`}>₹{farmerBalance.toFixed(0)}</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
-            <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">🔒 Apna Login Password / PIN Badlein</h3>
-            {pinChangeMsg && <p className="text-xs font-bold p-2 bg-slate-50 rounded-lg text-teal-800">{pinChangeMsg}</p>}
-            <form onSubmit={handleFarmerChangePin} className="flex gap-2">
-              <input type="password" required placeholder="Naya PIN (Min 4 chars)" value={newFarmerPin} onChange={(e) => setNewFarmerPin(e.target.value)} className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold outline-none" />
-              <button type="submit" className="bg-[#00796B] hover:bg-[#004D40] text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm">Update PIN</button>
-            </form>
-          </div>
-
-          {/* Farmer Entries & Digital Parchi List */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">🥛 Aapki Doodh Entries (Click for Parchi)</h3>
-            <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
-              {filteredFarmerEntries.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4">Is tareekh ke beech koi entry darj nahi hai.</p>
-              ) : (
-                filteredFarmerEntries.map((e) => (
-                  <div key={e.id} onClick={() => openHistoricSlip(e)} className="py-3 flex justify-between items-center text-xs hover:bg-slate-50 px-2 rounded-xl cursor-pointer transition">
-                    <div>
-                      <p className="font-bold text-slate-900">{formatAnimalLabel(e.milk_type)} • Shift: <span className="capitalize">{e.shift}</span></p>
-                      <p className="text-[10px] text-slate-400">{new Date(e.created_at).toLocaleDateString("en-IN")}</p>
-                    </div>
-                    <div className="text-right flex items-center gap-3">
-                      <div>
-                        <p className="font-black text-slate-900">{Number(e.quantity_litres || e.quantity_liters)} L (Fat: {e.fat_percentage}%)</p>
-                        <p className="text-emerald-700 font-bold">₹{e.total_amount}</p>
-                      </div>
-                      <span className="text-teal-700 bg-teal-50 border border-teal-200 px-2 py-1 rounded-lg text-[10px] font-bold">📄 Parchi</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </main>
-
-        {slipModalOpen && currentSlip && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
-              <div className="flex justify-between items-center mb-3 border-b pb-2">
-                <span className="text-xs font-black text-emerald-800 uppercase tracking-widest">Digital Doodh Parchi</span>
-                <button onClick={() => setSlipModalOpen(false)} className="text-slate-400 hover:text-slate-800 text-xl font-bold leading-none">✕</button>
-              </div>
-              <div className="bg-amber-50/40 p-4 rounded-2xl border border-dashed border-slate-300 font-mono text-slate-900 space-y-2 text-xs">
-                <div className="text-center border-b border-dashed border-slate-400 pb-2">
-                  <h2 className="font-black text-base text-slate-900 tracking-tight">{currentSlip.dairyName}</h2>
-                  <p className="text-[10px] text-slate-600">Helpline: {currentSlip.dairyPhone || "N/A"}</p>
-                  <p className="text-[10px] text-slate-500 font-sans mt-0.5">{currentSlip.date} • {currentSlip.time}</p>
-                </div>
-                <div className="py-1 border-b border-dashed border-slate-300 flex justify-between items-center">
-                  <div><p className="text-[10px] text-slate-500 uppercase">Kisan</p><p className="font-black text-sm text-slate-900">{currentSlip.farmerName}</p></div>
-                  <div className="text-right"><span className="bg-slate-900 text-white text-[11px] font-black px-2 py-0.5 rounded">ID: #{currentSlip.farmerCode}</span><p className="text-[10px] text-slate-500 mt-0.5">{currentSlip.shift}</p></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 py-1 text-slate-700">
-                  <div className="bg-white p-2 rounded-lg border border-slate-200"><p className="text-[9px] uppercase text-slate-400">Milk Type</p><p className="font-bold text-xs">{currentSlip.milkType}</p></div>
-                  <div className="bg-white p-2 rounded-lg border border-slate-200"><p className="text-[9px] uppercase text-slate-400">Fat %</p><p className="font-bold text-xs">{currentSlip.fat.toFixed(1)}%</p></div>
-                  <div className="bg-white p-2 rounded-lg border border-slate-200"><p className="text-[9px] uppercase text-slate-400">SNF %</p><p className="font-bold text-xs">{currentSlip.snf > 0 ? `${currentSlip.snf.toFixed(1)}%` : "N/A"}</p></div>
-                  <div className="bg-white p-2 rounded-lg border border-slate-200"><p className="text-[9px] uppercase text-slate-400">Water %</p><p className="font-bold text-xs">{currentSlip.water > 0 ? `${currentSlip.water.toFixed(1)}%` : "0.0%"}</p></div>
-                </div>
-                <div className="bg-white p-2 rounded-lg border border-slate-200 flex justify-between items-center">
-                  <span className="text-[10px] uppercase text-slate-400">Rate / Ltr</span>
-                  <span className="font-bold text-xs">₹{currentSlip.rate.toFixed(2)}</span>
-                </div>
-                <div className="bg-emerald-100/70 p-3 rounded-xl border border-emerald-300 text-emerald-950 flex justify-between items-center">
-                  <div><p className="text-[10px] font-bold uppercase text-emerald-800">Kul Doodh</p><p className="text-base font-black">{currentSlip.qty.toFixed(2)} Ltr</p></div>
-                  <div className="text-right"><p className="text-[10px] font-bold uppercase text-emerald-800">Kul Bhugtan</p><p className="text-2xl font-black text-emerald-900">₹{currentSlip.total.toFixed(2)}</p></div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                <button type="button" onClick={() => sendWhatsAppSlip(currentSlip)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow transition"><span>💬</span><span>WhatsApp</span></button>
-                <button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow transition"><span>🖨️</span><span>Print</span></button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // 4. DAIRY OWNER ADMIN DASHBOARD
   let viewingFarmerEntries: MilkEntry[] = [];
   let viewingFarmerPayments: PaymentRecord[] = [];
   let viewingTotalMilk = 0;
@@ -1275,6 +812,28 @@ export default function CompleteMasterDairyManager() {
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">{t.remainingMilk}</p>
                 <p className="text-xl sm:text-2xl font-black text-[#00796B] mt-1">{periodRemainingQty.toFixed(1)} L</p>
+              </div>
+            </div>
+
+            <div className="mt-4 bg-gradient-to-br from-teal-900 to-[#00796B] text-white p-5 rounded-2xl shadow-md space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-teal-200">
+                  📊 Financial Ledger & Payouts
+                </h3>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-teal-100 font-bold">Ledger Filter:</span>
+                  <input type="date" value={filterStartDate} onChange={(e) => { setFilterStartDate(e.target.value); setActiveDatePill("Custom"); }} className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-white font-bold outline-none" />
+                  <span className="text-teal-100">se</span>
+                  <input type="date" value={filterEndDate} onChange={(e) => { setFilterEndDate(e.target.value); setActiveDatePill("Custom"); }} className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-white font-bold outline-none" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10"><p className="text-[9px] font-bold text-teal-100 uppercase">Total Earned</p><p className="text-base font-black text-white mt-0.5">₹{periodTotalEarned.toFixed(0)}</p></div>
+                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10"><p className="text-[9px] font-bold text-emerald-200 uppercase">Total Received</p><p className="text-base font-black text-emerald-300 mt-0.5">₹{periodTotalReceived.toFixed(0)}</p></div>
+                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10"><p className="text-[9px] font-bold text-rose-200 uppercase">Total Paid</p><p className="text-base font-black text-rose-300 mt-0.5">₹{periodTotalPaid.toFixed(0)}</p></div>
+                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10"><p className="text-[9px] font-bold text-amber-200 uppercase">Remaining Payable</p><p className="text-base font-black text-amber-300 mt-0.5">₹{periodRemainingPayable.toFixed(0)}</p></div>
+                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10 col-span-2 sm:col-span-1"><p className="text-[9px] font-bold text-sky-200 uppercase">Remaining Receivable</p><p className="text-base font-black text-sky-300 mt-0.5">₹{periodRemainingReceivable.toFixed(0)}</p></div>
               </div>
             </div>
           </div>

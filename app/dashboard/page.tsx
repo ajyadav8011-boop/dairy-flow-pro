@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -181,6 +181,9 @@ const translations: Record<string, Record<string, string>> = {
 };
 
 export default function CompleteMasterDairyManager() {
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+
   const [lang, setLang] = useState<"en" | "hi">("hi");
   const t = translations[lang] || translations.en;
 
@@ -285,6 +288,11 @@ export default function CompleteMasterDairyManager() {
     const savedDairyId = localStorage.getItem("currentDairyId");
     const savedRole = localStorage.getItem("userRole") as "owner" | "farmer";
     const savedFarmerId = localStorage.getItem("currentFarmerId");
+    const isTermsAcceptedStorage = localStorage.getItem("dairyTermsAccepted");
+
+    if (isTermsAcceptedStorage === "true") {
+      setTermsAccepted(true);
+    }
 
     if (savedDairyId && savedRole) {
       setIsAuth(true);
@@ -294,6 +302,15 @@ export default function CompleteMasterDairyManager() {
       setLoading(false);
     }
   }, []);
+
+  const handleAllowTerms = () => {
+    if (agreed) {
+      setTermsAccepted(true);
+      localStorage.setItem("dairyTermsAccepted", "true");
+    } else {
+      alert("Kripya aage badhne ke liye terms ko allow karein.");
+    }
+  };
 
   const loadAppData = async (dId: string, role: "owner" | "farmer", fId: string | null) => {
     try {
@@ -448,6 +465,7 @@ export default function CompleteMasterDairyManager() {
     localStorage.clear();
     setIsAuth(false);
     setLoggedInFarmer(null);
+    setTermsAccepted(false);
   };
 
   const handlePillClick = (pill: string) => {
@@ -655,7 +673,7 @@ export default function CompleteMasterDairyManager() {
   };
 
   const sendWhatsAppSlip = (slip: DigitalSlipData) => {
-    const text = `🥛 *${slip.dairyName.toUpperCase()} - DOODH PARCHI* 🥛\n--------------------------------\n📅 Tarikh: ${slip.date} (${slip.time})\n☀️ Shift: ${slip.shift}\n👤 Kisan: *${slip.farmerName}* (ID: #${slip.farmerCode})\n🐄 Milk: ${slip.milkType}\n--------------------------------\n⚖️ Matra: *${slip.qty.toFixed(2)} Ltr*\n🧈 Fat: *${slip.fat.toFixed(1)}%*\n🧪 SNF: *${slip.snf > 0 ? slip.snf.toFixed(1) + "%" : "N/A"}*\n💧 Water: *${slip.water > 0 ? slip.water.toFixed(1) + "%" : "0.0%"}*\n💵 Rate: *₹${slip.rate.toFixed(2)} / Ltr*\n--------------------------------\n💰 *KUL RASHI: ₹${slip.total.toFixed(2)}*\n--------------------------------\nDairy Helpline: ${slip.dairyPhone || "N/A"}\nDhanyawad! 🙏`;
+    const text = `🥛 *${slip.dairyName.toUpperCase()} - DOODH PARCHI* 🥛\n--------------------------------\n📅 Tarikh: ${slip.date} (${slip.time})\n☀️ Shift: ${slip.shift}\n👤 Kisan: *${slip.farmerName}* (ID: #${slip.farmerCode})\n🐄 Milk: ${slip.milkType}\n--------------------------------\n⚖️️ Matra: *${slip.qty.toFixed(2)} Ltr*\n🧈 Fat: *${slip.fat.toFixed(1)}%*\n🧪 SNF: *${slip.snf > 0 ? slip.snf.toFixed(1) + "%" : "N/A"}*\n💧 Water: *${slip.water > 0 ? slip.water.toFixed(1) + "%" : "0.0%"}*\n💵 Rate: *₹${slip.rate.toFixed(2)} / Ltr*\n--------------------------------\n💰 *KUL RASHI: ₹${slip.total.toFixed(2)}*\n--------------------------------\nDairy Helpline: ${slip.dairyPhone || "N/A"}\nDhanyawad! 🙏`;
     let cleanPhone = slip.farmerPhone.replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
@@ -846,7 +864,61 @@ export default function CompleteMasterDairyManager() {
     );
   }
 
-  // LOGIN & REGISTER SCREEN
+  // 1. TERMS & CONDITIONS SCREEN (AGREEMENT GATE)
+  if (!termsAccepted) {
+    return (
+      <div style={{ maxWidth: '800px', margin: '40px auto', padding: '20px', fontFamily: 'sans-serif' }}>
+        <h2 style={{ marginBottom: '20px', color: '#333' }}>Dairy Flow Pro - Terms & Conditions</h2>
+
+        <div style={{ 
+          height: '250px', 
+          overflowY: 'scroll', 
+          padding: '20px', 
+          border: '1px solid #ccc', 
+          borderRadius: '8px',
+          backgroundColor: '#f9f9f9',
+          marginBottom: '20px',
+          lineHeight: '1.6',
+          fontSize: '14px',
+          color: '#555'
+        }}>
+          Dairy Flow Pro is built with the primary purpose of helping dairy owners, workers, and farmers manage their daily milk collection, animal records, financial tracking, payment calculations, and operational summaries smoothly and efficiently, ensuring that everyone involved in the dairy ecosystem can keep track of their daily work transparently and without unnecessary complications. Every feature integrated into this platform has been designed specifically to support the daily workflow of managing milk distribution, maintaining daily shift records, tracking fat and SNF values, handling customer accounts, and generating reports digitally. However, while we provide this platform as a helpful management tool to make your daily routine easier, it is absolutely essential for every user, dairy owner, and farmer to understand how data, system usage, privacy, and liabilities are handled as you navigate through the application. As you move forward into the subsequent pages, explore the various dashboard features, enter daily data, and use the system regularly, please be explicitly aware of our strict liability terms regarding data security, system operations, and unexpected technical failures. We take absolutely no responsibility or liability whatsoever for any data loss, data corruption, financial loss, server downtime, system errors, data leaks, or security breaches that may occur on the platform under any circumstances whatsoever. The user, dairy owner, and farmer explicitly acknowledge, understand, and agree that we carry zero legal, operational, financial, or moral liability for what happens to the data entered, stored, or processed within the system, whether due to technical glitches, software bugs, unauthorized access, hacking attempts, third-party interference, or any unforeseen circumstances beyond our control. You are solely, entirely, and completely responsible for your own data security, account credentials, device safety, operational choices, and passwords. The service is provided strictly on an as-is and as-available basis without any warranties or guarantees of any kind, whether express or implied, meaning we do not guarantee uninterrupted access, error-free execution, or absolute perfection in system performance. By continuing to use this application, accessing the features, scrolling through the pages, and proceeding further into the system, you unconditionally accept that the platform provider bears no responsibility for any unexpected issues, breaches, losses, or damages, and you completely agree to these terms to proceed further.
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+          <input 
+            type="checkbox" 
+            id="termsCheck" 
+            checked={agreed} 
+            onChange={(e) => setAgreed(e.target.checked)}
+            style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+          />
+          <label htmlFor="termsCheck" style={{ cursor: 'pointer', fontSize: '15px', fontWeight: '500', color: '#333' }}>
+            I have read and agree to all the terms and conditions. Allow access.
+          </label>
+        </div>
+
+        <button 
+          onClick={handleAllowTerms}
+          disabled={!agreed}
+          style={{
+            padding: '12px 28px',
+            backgroundColor: agreed ? '#27ae60' : '#bdc3c7',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            fontSize: '16px',
+            cursor: agreed ? 'pointer' : 'not-allowed',
+            fontWeight: 'bold'
+          }}
+        >
+          Allow & Continue
+        </button>
+      </div>
+    );
+  }
+
+  // 2. LOGIN & REGISTER SCREEN
   if (!isAuth) {
     return (
       <div className="min-h-screen bg-[#F3F6F4] flex items-center justify-center p-4 font-sans">
@@ -929,7 +1001,7 @@ export default function CompleteMasterDairyManager() {
     );
   }
 
-  // FARMER PORTAL VIEW
+  // 3. FARMER PORTAL VIEW
   if (userRole === "farmer" && loggedInFarmer) {
     const isFarmerDateInRange = (dateStr: string) => {
       const d = dateStr.slice(0, 10);
@@ -1027,6 +1099,7 @@ export default function CompleteMasterDairyManager() {
             </form>
           </div>
 
+          {/* Farmer Entries & Digital Parchi List */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
             <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">🥛 Aapki Doodh Entries (Click for Parchi)</h3>
             <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
@@ -1067,14 +1140,8 @@ export default function CompleteMasterDairyManager() {
                   <p className="text-[10px] text-slate-500 font-sans mt-0.5">{currentSlip.date} • {currentSlip.time}</p>
                 </div>
                 <div className="py-1 border-b border-dashed border-slate-300 flex justify-between items-center">
-                  <div>
-                    <p className="text-[10px] text-slate-500 uppercase">Kisan</p>
-                    <p className="font-black text-sm text-slate-900">{currentSlip.farmerName}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="bg-slate-900 text-white text-[11px] font-black px-2 py-0.5 rounded">ID: #{currentSlip.farmerCode}</span>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{currentSlip.shift}</p>
-                  </div>
+                  <div><p className="text-[10px] text-slate-500 uppercase">Kisan</p><p className="font-black text-sm text-slate-900">{currentSlip.farmerName}</p></div>
+                  <div className="text-right"><span className="bg-slate-900 text-white text-[11px] font-black px-2 py-0.5 rounded">ID: #{currentSlip.farmerCode}</span><p className="text-[10px] text-slate-500 mt-0.5">{currentSlip.shift}</p></div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 py-1 text-slate-700">
                   <div className="bg-white p-2 rounded-lg border border-slate-200"><p className="text-[9px] uppercase text-slate-400">Milk Type</p><p className="font-bold text-xs">{currentSlip.milkType}</p></div>
@@ -1092,12 +1159,8 @@ export default function CompleteMasterDairyManager() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mt-4">
-                <button type="button" onClick={() => sendWhatsAppSlip(currentSlip)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow transition">
-                  <span>💬</span><span>WhatsApp Parchi</span>
-                </button>
-                <button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow transition">
-                  <span>🖨️</span><span>Print Karein</span>
-                </button>
+                <button type="button" onClick={() => sendWhatsAppSlip(currentSlip)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow transition"><span>💬</span><span>WhatsApp</span></button>
+                <button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow transition"><span>🖨️</span><span>Print</span></button>
               </div>
             </div>
           </div>
@@ -1106,7 +1169,7 @@ export default function CompleteMasterDairyManager() {
     );
   }
 
-  // DAIRY OWNER ADMIN DASHBOARD
+  // 4. DAIRY OWNER ADMIN DASHBOARD
   let viewingFarmerEntries: MilkEntry[] = [];
   let viewingFarmerPayments: PaymentRecord[] = [];
   let viewingTotalMilk = 0;
@@ -1212,28 +1275,6 @@ export default function CompleteMasterDairyManager() {
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">{t.remainingMilk}</p>
                 <p className="text-xl sm:text-2xl font-black text-[#00796B] mt-1">{periodRemainingQty.toFixed(1)} L</p>
-              </div>
-            </div>
-
-            <div className="mt-4 bg-gradient-to-br from-teal-900 to-[#00796B] text-white p-5 rounded-2xl shadow-md space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-3">
-                <h3 className="text-xs font-black uppercase tracking-wider text-teal-200">
-                  📊 Financial Ledger & Payouts
-                </h3>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-teal-100 font-bold">Ledger Filter:</span>
-                  <input type="date" value={filterStartDate} onChange={(e) => { setFilterStartDate(e.target.value); setActiveDatePill("Custom"); }} className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-white font-bold outline-none" />
-                  <span className="text-teal-100">se</span>
-                  <input type="date" value={filterEndDate} onChange={(e) => { setFilterEndDate(e.target.value); setActiveDatePill("Custom"); }} className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-white font-bold outline-none" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10"><p className="text-[9px] font-bold text-teal-100 uppercase">Total Earned</p><p className="text-base font-black text-white mt-0.5">₹{periodTotalEarned.toFixed(0)}</p></div>
-                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10"><p className="text-[9px] font-bold text-emerald-200 uppercase">Total Received</p><p className="text-base font-black text-emerald-300 mt-0.5">₹{periodTotalReceived.toFixed(0)}</p></div>
-                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10"><p className="text-[9px] font-bold text-rose-200 uppercase">Total Paid</p><p className="text-base font-black text-rose-300 mt-0.5">₹{periodTotalPaid.toFixed(0)}</p></div>
-                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10"><p className="text-[9px] font-bold text-amber-200 uppercase">Remaining Payable</p><p className="text-base font-black text-amber-300 mt-0.5">₹{periodRemainingPayable.toFixed(0)}</p></div>
-                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10 col-span-2 sm:col-span-1"><p className="text-[9px] font-bold text-sky-200 uppercase">Remaining Receivable</p><p className="text-base font-black text-sky-300 mt-0.5">₹{periodRemainingReceivable.toFixed(0)}</p></div>
               </div>
             </div>
           </div>

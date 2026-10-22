@@ -7,9 +7,6 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Dairy Flow Pro',
   description: 'Manage your dairy business easily and efficiently',
-  icons: {
-    icon: '/logo.png', // Yahan aapke logo ki file ka naam aayega jo public folder mein hogi
-  },
 };
 
 export default function RootLayout({
